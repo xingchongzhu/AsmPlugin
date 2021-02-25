@@ -1,0 +1,109 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-android-extensions'
+apply plugin: 'asm-plugin'
+
+android {
+    compileSdkVersion 29
+    buildToolsVersion "29.0.2"
+
+    defaultConfig {
+        applicationId "com.lulu.asminjectdemo"
+        minSdkVersion 16
+        targetSdkVersion 29
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    implementation 'androidx.appcompat:appcompat:1.1.0'
+    implementation 'androidx.core:core-ktx:1.0.0-alpha1'
+    implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+    implementation project(':asmutil')
+}
+
+import org.objectweb.asm.AnnotationVisitor
+import org.objectweb.asm.MethodVisitor
+import com.data.asm.AutoMethodVisitor
+
+autosettingparams {
+    name = "ASM字节码插装工具"
+    isDebug = true
+    isOpenLogTrack = false
+    // 因为默认系统包[android.support, androidx]是被过滤掉的,想对默认过滤掉的类插桩的话可以手动添加包名,但是不建议对系统类进行插桩,容易出现不可预期错误,可选,默认空
+    //include = ["android.support.v7.widget"]
+    // [android.support, androidx]默认过滤，可手动追加过滤的包,可选,默认空不追加
+    //exclude = []
+    // 支持自定义配置,可选,默认空
+    matchData = [
+            [//是否使用注解来找对应方法
+              'isAnotation'  : true,
+              //方法的匹配，可以通过类名或者实现的接口名匹配
+              'ClassFilter'  : [
+                      ['ClassName' : 'com.lulu.asminjectdemo.MainActivity', 'InterfaceName': 'android/view/View$OnClickListener',
+                       'MethodName': 'onClick', 'MethodDes': '(Landroid/view/View;)V']
+              ],
+              //插入的字节码，方法的执行顺序visitAnnotation->onMethodEnter->onMethodExit
+              'MethodVisitor': {
+                  MethodVisitor methodVisitor, int access, String name, String desc ->
+                      MethodVisitor adapter = new AutoMethodVisitor(methodVisitor, access, name, desc) {
+                          boolean isAnnotation = false
+
+                          @Override
+                          protected void onMethodEnter() {
+                              super.onMethodEnter()
+                              mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
+                              mv.visitLdcInsn("click start")
+                              mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false)
+
+                              //使用注解找对应方法的时候得加这个判断
+                              if (!isAnnotation) {
+                                  return
+                              }
+
+                          }
+
+                          @Override
+                          protected void onMethodExit(int opcode) {
+                              super.onMethodExit(opcode)
+                              mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
+                              mv.visitLdcInsn("click finish")
+                              mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false)
+
+                              //使用注解找对应方法的时候得加这个判断
+                              if (!isAnnotation) {
+                                  return
+                              }
+                          }
+
+                          // 需要通过注解的方式加字节码才会重写这个方法来进行条件过滤
+                          @Override
+                          AnnotationVisitor visitAnnotation(String des, boolean visible) {
+                              if (des.equals("Lcom/xishuang/annotation/AutoCount;")) {
+                                  println "注解匹配：" + des
+                                  isAnnotation = true
+                              }
+                              return super.visitAnnotation(des, visible)
+                          }
+                      }
+                      return adapter
+              }
+            ]
+    ]
+}

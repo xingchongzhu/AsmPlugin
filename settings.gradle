@@ -1,0 +1,3 @@
+rootProject.name='ASMInjectDemo'
+include ':app', ':asmutil'
+include ':asmplugin'
